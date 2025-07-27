@@ -131,9 +131,16 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                 
                 api_response.raise_for_status()
                 response = api_response.json()
+                print(f"\nReceived response from custom Bedrock URL")
+                print(f"Response status: {api_response.status_code}")
             else:
                 # Use standard boto3 client
                 response = bedrock_client.converse(**bedrock_request)
+                print(f"\nReceived response from AWS Bedrock")
+            
+            # Log response details
+            print(f"Response output: {json.dumps(response.get('output', {}), indent=2)}")
+            print(f"Response usage: {json.dumps(response.get('usage', {}), indent=2)}")
             
             # Convert response back to Claude format
             content = response['output']['message']['content'][0]['text']
@@ -157,6 +164,12 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(claude_response).encode())
+            
+            print(f"\nSent Claude response:")
+            print(f"Response ID: {claude_response['id']}")
+            print(f"Content length: {len(content)} characters")
+            print(f"Stop reason: {claude_response['stop_reason']}")
+            print(f"Tokens - Input: {claude_response['usage']['input_tokens']}, Output: {claude_response['usage']['output_tokens']}")
             
         except requests.exceptions.HTTPError as e:
             # Log HTTP errors with more detail
@@ -288,9 +301,16 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                     
                     api_response.raise_for_status()
                     response = api_response.json()
+                    print(f"\nReceived response from custom Bedrock URL (invoke endpoint)")
+                    print(f"Response status: {api_response.status_code}")
                 else:
                     # Use standard boto3 client
                     response = bedrock_client.converse(**bedrock_request)
+                    print(f"\nReceived response from AWS Bedrock (invoke endpoint)")
+                
+                # Log response details
+                print(f"Response output message: {json.dumps(response.get('output', {}).get('message', {}), indent=2)}")
+                print(f"Response usage: {json.dumps(response.get('usage', {}), indent=2)}")
                 
                 # Convert response back to Anthropic format expected by invoke
                 content_blocks = []
@@ -320,6 +340,12 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps(anthropic_response).encode())
+                
+                print(f"\nSent Anthropic response (invoke endpoint):")
+                print(f"Response ID: {anthropic_response['id']}")
+                print(f"Content blocks: {len(anthropic_response['content'])}")
+                print(f"Stop reason: {anthropic_response['stop_reason']}")
+                print(f"Tokens - Input: {anthropic_response['usage']['input_tokens']}, Output: {anthropic_response['usage']['output_tokens']}")
             
         except requests.exceptions.HTTPError as e:
             # Log HTTP errors with more detail
@@ -379,6 +405,8 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                     print(f"Response body: {error_text}")
                 
                 api_response.raise_for_status()
+                print(f"\nStarted streaming response from custom Bedrock URL")
+                print(f"Response status: {api_response.status_code}")
                 
                 # Parse streaming response
                 response = {'stream': []}
@@ -415,6 +443,7 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
             else:
                 # Use standard boto3 client
                 response = bedrock_client.converse_stream(**bedrock_request)
+                print(f"\nStarted streaming response from AWS Bedrock")
             
             # Send headers for streaming response
             self.send_response(200)
@@ -428,6 +457,9 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
             content_blocks = []
             current_index = 0
             total_text = ""
+            total_chunks = 0
+            input_tokens = 0
+            output_tokens = 0
             
             for event in response['stream']:
                 if 'messageStart' in event:
@@ -467,6 +499,7 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                     # Send content_block_delta event
                     delta_text = event['contentBlockDelta']['delta'].get('text', '')
                     total_text += delta_text
+                    total_chunks += 1
                     content_block_delta = {
                         'type': 'content_block_delta',
                         'index': current_index,
@@ -493,6 +526,8 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                     # Send message_delta with final usage
                     if 'metadata' in event and 'usage' in event['metadata']:
                         usage = event['metadata']['usage']
+                        input_tokens = usage.get('inputTokens', 0)
+                        output_tokens = usage.get('outputTokens', 0)
                         message_delta = {
                             'type': 'message_delta',
                             'delta': {
@@ -500,7 +535,7 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                                 'stop_sequence': None
                             },
                             'usage': {
-                                'output_tokens': usage.get('outputTokens', 0)
+                                'output_tokens': output_tokens
                             }
                         }
                         self.wfile.write(f"event: message_delta\ndata: {json.dumps(message_delta)}\n\n".encode())
@@ -520,8 +555,20 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
             # Ensure the response is flushed
             self.wfile.flush()
             
+            print(f"\nCompleted streaming response:")
+            print(f"Total text chunks sent: {total_chunks}")
+            print(f"Total text length: {len(total_text)} characters")
+            print(f"Tokens - Input: {input_tokens}, Output: {output_tokens}")
+            print(f"First 100 chars: {total_text[:100]}..." if len(total_text) > 100 else f"Full text: {total_text}")
+            
+        except requests.exceptions.HTTPError as e:
+            print(f"\nHTTP Error in streaming response: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Error response status: {e.response.status_code}")
+                print(f"Error response body: {e.response.text}")
         except Exception as e:
-            print(f"Error in streaming response: {e}")
+            print(f"\nError in streaming response: {e}")
+            print(f"Error type: {type(e).__name__}")
             # Try to send error event if possible
             try:
                 error_event = {
