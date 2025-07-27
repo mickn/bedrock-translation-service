@@ -113,11 +113,22 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                     'Content-Type': 'application/json',
                     'authorization-token': ACCESS_TOKEN
                 }
+                url = f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse"
                 api_response = requests.post(
-                    f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse",
+                    url,
                     json=bedrock_request,
                     headers=headers
                 )
+                
+                # Log detailed error info for bad requests
+                if api_response.status_code == 400:
+                    print(f"\n400 Bad Request Error:")
+                    print(f"URL: {url}")
+                    print(f"Headers: {headers}")
+                    print(f"Request body: {json.dumps(bedrock_request, indent=2)}")
+                    print(f"Response status: {api_response.status_code}")
+                    print(f"Response body: {api_response.text}")
+                
                 api_response.raise_for_status()
                 response = api_response.json()
             else:
@@ -147,9 +158,17 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(claude_response).encode())
             
+        except requests.exceptions.HTTPError as e:
+            # Log HTTP errors with more detail
+            print(f"\nHTTP Error in messages endpoint: {e}")
+            print(f"Original Claude request: {json.dumps(claude_request, indent=2)}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Error response status: {e.response.status_code}")
+                print(f"Error response body: {e.response.text}")
         except Exception as e:
-            # Log the error for debugging
-            print(f"Error: {e}")
+            # Log other errors
+            print(f"\nError in messages endpoint: {e}")
+            print(f"Error type: {type(e).__name__}")
             print(f"Request was: {json.dumps(claude_request, indent=2)}")
             
             # Send error response
@@ -251,11 +270,22 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                         'Content-Type': 'application/json',
                         'authorization-token': ACCESS_TOKEN
                     }
+                    url = f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse"
                     api_response = requests.post(
-                        f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse",
+                        url,
                         json=bedrock_request,
                         headers=headers
                     )
+                    
+                    # Log detailed error info for bad requests
+                    if api_response.status_code == 400:
+                        print(f"\n400 Bad Request Error in invoke endpoint:")
+                        print(f"URL: {url}")
+                        print(f"Headers: {headers}")
+                        print(f"Request body: {json.dumps(bedrock_request, indent=2)}")
+                        print(f"Response status: {api_response.status_code}")
+                        print(f"Response body: {api_response.text}")
+                    
                     api_response.raise_for_status()
                     response = api_response.json()
                 else:
@@ -291,9 +321,17 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps(anthropic_response).encode())
             
+        except requests.exceptions.HTTPError as e:
+            # Log HTTP errors with more detail
+            print(f"\nHTTP Error in invoke endpoint: {e}")
+            print(f"Original request body: {request_body.decode()}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Error response status: {e.response.status_code}")
+                print(f"Error response body: {e.response.text}")
         except Exception as e:
-            # Log the error for debugging
-            print(f"Error in invoke endpoint: {e}")
+            # Log other errors
+            print(f"\nError in invoke endpoint: {e}")
+            print(f"Error type: {type(e).__name__}")
             print(f"Request was: {request_body.decode()}")
             
             # Send error response in Anthropic format
@@ -321,12 +359,25 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                     'Accept': 'text/event-stream',
                     'Accept-Encoding': 'gzip, deflate'
                 }
+                url = f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse-stream"
                 api_response = requests.post(
-                    f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse-stream",
+                    url,
                     json=bedrock_request,
                     headers=headers,
                     stream=True
                 )
+                
+                # Log detailed error info for bad requests
+                if api_response.status_code == 400:
+                    print(f"\n400 Bad Request Error in streaming endpoint:")
+                    print(f"URL: {url}")
+                    print(f"Headers: {headers}")
+                    print(f"Request body: {json.dumps(bedrock_request, indent=2)}")
+                    print(f"Response status: {api_response.status_code}")
+                    # For streaming, we need to consume the response to see the error
+                    error_text = api_response.text
+                    print(f"Response body: {error_text}")
+                
                 api_response.raise_for_status()
                 
                 # Parse streaming response
