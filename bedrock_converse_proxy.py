@@ -9,16 +9,23 @@ import re
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import boto3
+import requests
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# AWS Bedrock client
-bedrock_client = boto3.client(
-    'bedrock-runtime',
-    region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
-)
+# Check if using custom Bedrock URL
+BEDROCK_CUSTOM_URL = os.environ.get('BEDROCK_CUSTOM_URL')
+ACCESS_TOKEN = os.environ.get('ACCESS_TOKEN')
+
+# AWS Bedrock client (only used if no custom URL)
+bedrock_client = None
+if not BEDROCK_CUSTOM_URL:
+    bedrock_client = boto3.client(
+        'bedrock-runtime',
+        region_name=os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+    )
 
 class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the Bedrock Converse proxy"""
@@ -100,7 +107,22 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
             print(json.dumps(bedrock_request, indent=2))
             
             # Call Bedrock Converse API
-            response = bedrock_client.converse(**bedrock_request)
+            if BEDROCK_CUSTOM_URL:
+                # Use custom URL with authorization header
+                headers = {
+                    'Content-Type': 'application/json',
+                    'authorization-token': ACCESS_TOKEN
+                }
+                api_response = requests.post(
+                    f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse",
+                    json=bedrock_request,
+                    headers=headers
+                )
+                api_response.raise_for_status()
+                response = api_response.json()
+            else:
+                # Use standard boto3 client
+                response = bedrock_client.converse(**bedrock_request)
             
             # Convert response back to Claude format
             content = response['output']['message']['content'][0]['text']
@@ -223,7 +245,22 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                 self.handle_streaming_response(bedrock_request, anthropic_request)
             else:
                 # Handle non-streaming response
-                response = bedrock_client.converse(**bedrock_request)
+                if BEDROCK_CUSTOM_URL:
+                    # Use custom URL with authorization header
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'authorization-token': ACCESS_TOKEN
+                    }
+                    api_response = requests.post(
+                        f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse",
+                        json=bedrock_request,
+                        headers=headers
+                    )
+                    api_response.raise_for_status()
+                    response = api_response.json()
+                else:
+                    # Use standard boto3 client
+                    response = bedrock_client.converse(**bedrock_request)
                 
                 # Convert response back to Anthropic format expected by invoke
                 content_blocks = []
@@ -276,7 +313,32 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
         """Handle streaming response for invoke-with-response-stream"""
         try:
             # Call Bedrock ConverseStream API
-            response = bedrock_client.converse_stream(**bedrock_request)
+            if BEDROCK_CUSTOM_URL:
+                # Use custom URL with authorization header for streaming
+                headers = {
+                    'Content-Type': 'application/json',
+                    'authorization-token': ACCESS_TOKEN,
+                    'Accept': 'text/event-stream'
+                }
+                api_response = requests.post(
+                    f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse-stream",
+                    json=bedrock_request,
+                    headers=headers,
+                    stream=True
+                )
+                api_response.raise_for_status()
+                
+                # Parse streaming response
+                response = {'stream': []}
+                for line in api_response.iter_lines():
+                    if line:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            event_data = json.loads(line[6:])
+                            response['stream'].append(event_data)
+            else:
+                # Use standard boto3 client
+                response = bedrock_client.converse_stream(**bedrock_request)
             
             # Send headers for streaming response
             self.send_response(200)
