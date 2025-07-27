@@ -1,11 +1,8 @@
 model_list:
   - model_name: claude-3-5-sonnet-20241022
     litellm_params:
-      model: bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0
-      custom_llm_provider: bedrock_converse
-      aws_region_name: ${AWS_DEFAULT_REGION}
+      model: bedrock_converse/us.anthropic.claude-3-5-sonnet-20241022-v2:0
       
 litellm_settings:
   drop_params: true
   set_verbose: true
-  success_callback: ["custom_bedrock_provider"]

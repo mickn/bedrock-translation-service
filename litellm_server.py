@@ -10,10 +10,13 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import and register our custom provider
+# Import and register our custom provider BEFORE importing litellm
 import custom_bedrock_provider
 
-# Now start LiteLLM server
+# Now import litellm to verify provider is registered
+import litellm
+
+# Start LiteLLM server
 from litellm.proxy.proxy_cli import run_server
 import argparse
 
@@ -24,13 +27,14 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=4000)
     args = parser.parse_args()
     
-    # Set up sys.argv for LiteLLM
-    sys.argv = ['litellm', '--config', args.config, '--port', str(args.port)]
-    
+    # Verify custom provider is registered
     print(f"Starting LiteLLM server with custom Bedrock Converse provider")
     print(f"Config: {args.config}")
     print(f"Port: {args.port}")
-    print(f"Custom provider registered: bedrock_converse")
+    print(f"Custom providers registered: {litellm.custom_provider_map}")
+    
+    # Set up sys.argv for LiteLLM
+    sys.argv = ['litellm', '--config', args.config, '--port', str(args.port)]
     
     # Run the server
     run_server()
