@@ -44,8 +44,11 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
             system_content = None
             
             # Handle system message if present
-            if 'system' in claude_request and claude_request['system']:
-                system_content = [{'text': claude_request['system']}]
+            if 'system' in claude_request:
+                system_text = claude_request['system']
+                # Only add system if it's a non-empty string
+                if isinstance(system_text, str) and system_text.strip():
+                    system_content = [{'text': system_text}]
             
             # Convert messages
             for msg in claude_request.get('messages', []):
@@ -84,7 +87,10 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                 bedrock_request['system'] = system_content
             
             # Debug logging
-            print(f"Bedrock request: {json.dumps(bedrock_request, indent=2)}")
+            print(f"\nClaude request received:")
+            print(json.dumps(claude_request, indent=2))
+            print(f"\nBedrock request to send:")
+            print(json.dumps(bedrock_request, indent=2))
             
             # Call Bedrock Converse API
             response = bedrock_client.converse(**bedrock_request)
