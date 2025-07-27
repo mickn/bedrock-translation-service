@@ -318,7 +318,8 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                 headers = {
                     'Content-Type': 'application/json',
                     'authorization-token': ACCESS_TOKEN,
-                    'Accept': 'text/event-stream'
+                    'Accept': 'text/event-stream',
+                    'Accept-Encoding': 'gzip, deflate'
                 }
                 api_response = requests.post(
                     f"{BEDROCK_CUSTOM_URL.rstrip('/')}/converse-stream",
@@ -330,12 +331,36 @@ class BedrockConverseProxyHandler(BaseHTTPRequestHandler):
                 
                 # Parse streaming response
                 response = {'stream': []}
-                for line in api_response.iter_lines():
-                    if line:
-                        line = line.decode('utf-8')
-                        if line.startswith('data: '):
-                            event_data = json.loads(line[6:])
-                            response['stream'].append(event_data)
+                buffer = ""
+                
+                # Handle SSE (Server-Sent Events) format
+                for chunk in api_response.iter_content(chunk_size=None, decode_unicode=True):
+                    if chunk:
+                        buffer += chunk
+                        lines = buffer.split('\n')
+                        
+                        # Process complete lines
+                        for i in range(len(lines) - 1):
+                            line = lines[i].strip()
+                            if line.startswith('data: '):
+                                try:
+                                    event_data = json.loads(line[6:])
+                                    response['stream'].append(event_data)
+                                except json.JSONDecodeError:
+                                    # Skip malformed lines
+                                    print(f"Warning: Could not parse event data: {line}")
+                                    continue
+                        
+                        # Keep the last incomplete line in buffer
+                        buffer = lines[-1]
+                
+                # Process any remaining data in buffer
+                if buffer.strip().startswith('data: '):
+                    try:
+                        event_data = json.loads(buffer.strip()[6:])
+                        response['stream'].append(event_data)
+                    except json.JSONDecodeError:
+                        print(f"Warning: Could not parse final event data: {buffer}")
             else:
                 # Use standard boto3 client
                 response = bedrock_client.converse_stream(**bedrock_request)
