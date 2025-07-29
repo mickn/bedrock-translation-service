@@ -18,7 +18,7 @@ load_dotenv()
 REGION          = os.getenv("AWS_DEFAULT_REGION", "us‑east‑1")
 CUSTOM_URL      = os.getenv("BEDROCK_CUSTOM_URL")   # e.g. a private VPC endpoint
 ACCESS_TOKEN    = os.getenv("ACCESS_TOKEN")         # optional bearer for custom URL
-DEFAULT_MODEL   = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+DEFAULT_MODEL   = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 client = boto3.client("bedrock-runtime", region_name=REGION) if not CUSTOM_URL else None
 
