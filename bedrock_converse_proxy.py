@@ -44,7 +44,28 @@ def _bedrock_http(path: str, payload: dict, stream: bool = False):
     """
     headers = {"Content-Type": "application/json", "authorization-token": ACCESS_TOKEN}
     url = CUSTOM_URL.rstrip("/") + path
+    
+    # Log the request details for debugging
+    print(f"\n=== Bedrock HTTP Request ===")
+    print(f"URL: {url}")
+    print(f"Headers: {headers}")
+    print(f"Payload: {json.dumps(payload, indent=2)}")
+    print(f"Stream: {stream}")
+    print("===========================\n")
+    
     resp = requests.post(url, json=payload, headers=headers, stream=stream, timeout=90)
+    
+    # If we get a 400, log the response body
+    if resp.status_code == 400:
+        print(f"\n=== 400 Bad Request Response ===")
+        print(f"Status: {resp.status_code}")
+        print(f"Headers: {dict(resp.headers)}")
+        try:
+            print(f"Body: {resp.text}")
+        except:
+            print("Could not read response body")
+        print("================================\n")
+    
     resp.raise_for_status()
     return resp
 
@@ -171,6 +192,12 @@ class Handler(BaseHTTPRequestHandler):
         """
         ALWAYS use Converse API, regardless of anthropic_version presence.
         """
+        print(f"\n=== Handle Invoke Request ===")
+        print(f"Model ID: {model_id}")
+        print(f"Streaming: {streaming}")
+        print(f"Incoming body: {json.dumps(body, indent=2)}")
+        print("===========================\n")
+        
         # Always build a Converse request
         payload = build_converse_request({**body, "model": model_id})
         
