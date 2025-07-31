@@ -202,8 +202,9 @@ class Handler(BaseHTTPRequestHandler):
         payload = build_converse_request({**body, "model": model_id})
         
         if CUSTOM_URL:
-            path = "/converse-stream" if streaming else "/converse"
-            resp = _bedrock_http(path, payload, stream=streaming)
+            # Preserve the original request path for custom URL
+            original_path = self.path
+            resp = _bedrock_http(original_path, payload, stream=streaming)
         else:
             resp = client.converse_stream(**payload) if streaming else client.converse(**payload)
 
