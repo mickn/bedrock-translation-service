@@ -415,7 +415,15 @@ class Handler(BaseHTTPRequestHandler):
             # For CUSTOM_URL, resp is a requests.Response object with SSE stream
             for line in resp.iter_lines():
                 if line:
-                    line_str = line.decode('utf-8')
+                    try:
+                        line_str = line.decode('utf-8')
+                    except UnicodeDecodeError:
+                        # Try with different encoding or skip malformed lines
+                        try:
+                            line_str = line.decode('latin-1')
+                        except:
+                            continue
+                    
                     if line_str.startswith('data: '):
                         try:
                             data = json.loads(line_str[6:])  # Skip "data: " prefix
