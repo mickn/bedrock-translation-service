@@ -170,7 +170,23 @@ class Handler(BaseHTTPRequestHandler):
         bed_req = build_converse_request(body)
         # choose transport
         if CUSTOM_URL:
-            resp = _bedrock_http("/converse", bed_req).json()
+            # Extract model name from the modelId in the request
+            model_id = bed_req.get("modelId", DEFAULT_MODEL)
+            model_name = model_id
+            
+            if '.' in model_name:
+                # Remove region/provider prefix
+                model_name = model_name.split('.', 1)[-1]
+            if ':' in model_name:
+                # Remove version suffix
+                model_name = model_name.split(':', 1)[0]
+            # Remove date suffix if present (e.g., -20241022-v2)
+            model_name = re.sub(r'-\d{8}-v\d+$', '', model_name)
+            # Shorten claude-3-5-sonnet to claude-35-sonnet for the API
+            model_name = model_name.replace('claude-3-5-sonnet', 'claude-35-sonnet')
+            
+            bedrock_path = f'/model/{model_name}/converse'
+            resp = _bedrock_http(bedrock_path, bed_req).json()
         else:
             resp = client.converse(**bed_req)
         # build Anthropic‑style response
@@ -202,6 +218,10 @@ class Handler(BaseHTTPRequestHandler):
 
         # Always build a Converse request
         payload = build_converse_request({**body, "model": model_id})
+        
+        print(f"\n=== Debug: Payload Model ID ===")
+        print(f"Payload modelId: {payload.get('modelId')}")
+        print("==============================\n")
 
         if CUSTOM_URL:
             # Debug: log the original path
@@ -212,21 +232,29 @@ class Handler(BaseHTTPRequestHandler):
             # e.g., "us.anthropic.claude-3-5-sonnet-20241022-v2:0" -> "claude-3-5-sonnet"
             # or "anthropic.claude-3-5-sonnet-20241022-v2:0" -> "claude-3-5-sonnet"
             model_name = model_id
+            print(f"Step 1 - Original model_id: {model_name}")
+            
             if '.' in model_name:
                 # Remove region/provider prefix
                 model_name = model_name.split('.', 1)[-1]
+                print(f"Step 2 - After removing prefix: {model_name}")
+                
             if ':' in model_name:
                 # Remove version suffix
                 model_name = model_name.split(':', 1)[0]
+                print(f"Step 3 - After removing version suffix: {model_name}")
+                
             # Remove date suffix if present (e.g., -20241022-v2)
             model_name = re.sub(r'-\d{8}-v\d+$', '', model_name)
+            print(f"Step 4 - After removing date suffix: {model_name}")
             
             # Shorten claude-3-5-sonnet to claude-35-sonnet for the API
             model_name = model_name.replace('claude-3-5-sonnet', 'claude-35-sonnet')
             
-            print(f"Extracted model name: {model_name}")
+            print(f"Step 5 - Final extracted model name: {model_name}")
             
             # Determine the correct Bedrock endpoint with model in path
+            # The custom URL already includes /model/bedrock, so we just append /model/{model-name}/converse
             if streaming:
                 # For streaming, use /model/{model}/converse-stream
                 bedrock_path = f'/model/{model_name}/converse-stream'
