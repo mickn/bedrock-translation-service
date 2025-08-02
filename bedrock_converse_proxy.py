@@ -111,6 +111,9 @@ def _bedrock_http(path: str, payload: dict, stream: bool = False):
     print("===========================\n")
 
     resp = requests.post(url, json=payload, headers=headers, stream=stream, timeout=90)
+    
+    print(f"Response status code: {resp.status_code}")
+    print(f"Response headers: {dict(resp.headers)}")
 
     # If we get a 400, log the response body
     if resp.status_code == 400:
@@ -413,8 +416,13 @@ class Handler(BaseHTTPRequestHandler):
         # Handle streaming differently for CUSTOM_URL vs boto3
         if CUSTOM_URL:
             # For CUSTOM_URL, resp is a requests.Response object with SSE stream
+            print(f"\n=== Streaming Response Debug ===")
+            print(f"Starting to read SSE stream...")
+            line_count = 0
             for line in resp.iter_lines():
+                line_count += 1
                 if line:
+                    print(f"Line {line_count}: {line[:100]}...")  # Print first 100 chars
                     try:
                         line_str = line.decode('utf-8')
                     except UnicodeDecodeError:
@@ -422,7 +430,10 @@ class Handler(BaseHTTPRequestHandler):
                         try:
                             line_str = line.decode('latin-1')
                         except:
+                            print(f"Could not decode line {line_count}")
                             continue
+                    
+                    print(f"Decoded line: {line_str[:200]}...")  # Print first 200 chars
                     
                     if line_str.startswith('data: '):
                         try:
@@ -431,9 +442,11 @@ class Handler(BaseHTTPRequestHandler):
                             # Just forward it as-is
                             self.wfile.write(f"event: {data.get('type', 'message')}\ndata: {json.dumps(data)}\n\n".encode())
                             self.wfile.flush()
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
                             # Skip non-JSON lines
+                            print(f"Failed to parse JSON: {e}")
                             pass
+            print(f"Finished processing {line_count} lines from SSE stream")
         else:
             # For boto3, resp is already parsed
             for evt in resp:
