@@ -409,12 +409,31 @@ class Handler(BaseHTTPRequestHandler):
             "messageStop": "message_stop",
             "metadata": "metadata",
         }
-        for evt in resp["stream"] if CUSTOM_URL else resp:
-            k = next(iter(evt))
-            snake = mapping.get(k, k)
-            payload = {**evt[k], "type": snake} if k != "metadata" else {"type": snake, **evt[k]}
-            self.wfile.write(f"event: {snake}\ndata: {json.dumps(payload)}\n\n".encode())
-            self.wfile.flush()
+        
+        # Handle streaming differently for CUSTOM_URL vs boto3
+        if CUSTOM_URL:
+            # For CUSTOM_URL, resp is a requests.Response object with SSE stream
+            for line in resp.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8')
+                    if line_str.startswith('data: '):
+                        try:
+                            data = json.loads(line_str[6:])  # Skip "data: " prefix
+                            # The data should already be in the correct format from Regeneron
+                            # Just forward it as-is
+                            self.wfile.write(f"event: {data.get('type', 'message')}\ndata: {json.dumps(data)}\n\n".encode())
+                            self.wfile.flush()
+                        except json.JSONDecodeError:
+                            # Skip non-JSON lines
+                            pass
+        else:
+            # For boto3, resp is already parsed
+            for evt in resp:
+                k = next(iter(evt))
+                snake = mapping.get(k, k)
+                payload = {**evt[k], "type": snake} if k != "metadata" else {"type": snake, **evt[k]}
+                self.wfile.write(f"event: {snake}\ndata: {json.dumps(payload)}\n\n".encode())
+                self.wfile.flush()
 
     # silence BaseHTTPRequestHandler logging
     def log_message(self, *_):
