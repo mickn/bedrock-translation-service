@@ -470,29 +470,65 @@ class Handler(BaseHTTPRequestHandler):
                                 data = json.loads(json_str)
                                 print(f"Parsed event: {data}")
                                 
-                                # Convert to Anthropic's SSE format
+                                # Convert to Bedrock Converse streaming format
                                 if "role" in data and data["role"] == "assistant":
-                                    # This is a messageStart event
+                                    # This is a messageStart event - Bedrock format
                                     event_data = {
                                         "type": "message_start",
-                                        "message": {
-                                            "id": data.get("p", "msg_unknown"),
-                                            "type": "message",
-                                            "role": "assistant",
-                                            "content": [],
-                                            "model": "claude-3-5-sonnet",
-                                            "usage": {"input_tokens": 0, "output_tokens": 0}
-                                        }
+                                        "role": "assistant"
                                     }
                                     self.wfile.write(f"event: message_start\ndata: {json.dumps(event_data)}\n\n".encode())
+                                    
+                                    # Also send contentBlockStart
+                                    block_start = {
+                                        "type": "content_block_start",
+                                        "start": {
+                                            "contentBlock": {
+                                                "text": ""
+                                            }
+                                        },
+                                        "contentBlockIndex": 0
+                                    }
+                                    self.wfile.write(f"event: content_block_start\ndata: {json.dumps(block_start)}\n\n".encode())
+                                    
                                 elif "delta" in data and "text" in data["delta"]:
-                                    # This is a content block delta
+                                    # This is a content block delta - Bedrock format
                                     event_data = {
                                         "type": "content_block_delta",
-                                        "index": data.get("contentBlockIndex", 0),
-                                        "delta": {"type": "text_delta", "text": data["delta"]["text"]}
+                                        "delta": {
+                                            "text": data["delta"]["text"]
+                                        },
+                                        "contentBlockIndex": data.get("contentBlockIndex", 0)
                                     }
                                     self.wfile.write(f"event: content_block_delta\ndata: {json.dumps(event_data)}\n\n".encode())
+                                    
+                                elif "stopReason" in data:
+                                    # This is a message stop event
+                                    # First send contentBlockStop
+                                    block_stop = {
+                                        "type": "content_block_stop",
+                                        "contentBlockIndex": 0
+                                    }
+                                    self.wfile.write(f"event: content_block_stop\ndata: {json.dumps(block_stop)}\n\n".encode())
+                                    
+                                    # Then send messageStop with stopReason
+                                    stop_event = {
+                                        "type": "message_stop",
+                                        "stopReason": data["stopReason"]
+                                    }
+                                    self.wfile.write(f"event: message_stop\ndata: {json.dumps(stop_event)}\n\n".encode())
+                                    
+                                elif "metrics" in data and "usage" in data:
+                                    # This is metadata event with usage stats
+                                    metadata_event = {
+                                        "type": "metadata",
+                                        "usage": {
+                                            "inputTokens": data["usage"]["inputTokens"],
+                                            "outputTokens": data["usage"]["outputTokens"],
+                                            "totalTokens": data["usage"]["totalTokens"]
+                                        }
+                                    }
+                                    self.wfile.write(f"event: metadata\ndata: {json.dumps(metadata_event)}\n\n".encode())
                                 
                                 self.wfile.flush()
                                 
@@ -505,12 +541,6 @@ class Handler(BaseHTTPRequestHandler):
                         else:
                             # No complete JSON found yet, wait for more data
                             break
-            
-            # Send final events
-            self.wfile.write(b"event: content_block_stop\ndata: {\"type\": \"content_block_stop\", \"index\": 0}\n\n")
-            self.wfile.write(b"event: message_delta\ndata: {\"type\": \"message_delta\", \"delta\": {\"stop_reason\": \"end_turn\", \"stop_sequence\": null}, \"usage\": {\"output_tokens\": 0}}\n\n")
-            self.wfile.write(b"event: message_stop\ndata: {\"type\": \"message_stop\"}\n\n")
-            self.wfile.flush()
             
             print(f"Finished processing binary stream")
         else:
