@@ -176,9 +176,15 @@ def build_converse_request(body):
     
     # Only add system if it's not empty
     if sys := body.get("system"):
-        # Skip empty system prompts
-        if sys.strip():
-            req["system"] = [{"text": sys}]
+        # Handle system as either string or list
+        if isinstance(sys, str):
+            # Skip empty string system prompts
+            if sys.strip():
+                req["system"] = [{"text": sys}]
+        elif isinstance(sys, list):
+            # System is already a list, use as-is if not empty
+            if sys:
+                req["system"] = sys
     
     return req
 
