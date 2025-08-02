@@ -37,12 +37,53 @@ def _write_json(handler, code, obj):
     handler.end_headers()
     handler.wfile.write(data)
 
+def verify_regeneron_payload_structure(payload: dict) -> None:
+    """
+    Verify the payload matches Regeneron's expected structure.
+    Raises ValueError if structure is incorrect.
+    """
+    # Check messages structure
+    if "messages" in payload:
+        for i, msg in enumerate(payload["messages"]):
+            if "role" not in msg:
+                raise ValueError(f"Message {i} missing 'role'")
+            if "content" not in msg:
+                raise ValueError(f"Message {i} missing 'content' array")
+            if not isinstance(msg["content"], list):
+                raise ValueError(f"Message {i} 'content' must be an array")
+            for j, content_item in enumerate(msg["content"]):
+                if not isinstance(content_item, dict) or "text" not in content_item:
+                    raise ValueError(f"Message {i} content[{j}] must be an object with 'text' field")
+    
+    # Check system structure if present
+    if "system" in payload and payload["system"] is not None:
+        if not isinstance(payload["system"], list):
+            raise ValueError("'system' must be an array")
+        for i, sys_item in enumerate(payload["system"]):
+            if not isinstance(sys_item, dict) or "text" not in sys_item:
+                raise ValueError(f"system[{i}] must be an object with 'text' field")
+    
+    # Check inferenceConfig structure if present
+    if "inferenceConfig" in payload and payload["inferenceConfig"] is not None:
+        if not isinstance(payload["inferenceConfig"], dict):
+            raise ValueError("'inferenceConfig' must be an object")
+        # Check for correct camelCase keys
+        valid_keys = {"maxTokens", "temperature", "topP", "topK", "stopSequences"}
+        for key in payload["inferenceConfig"]:
+            if key not in valid_keys:
+                raise ValueError(f"Invalid inferenceConfig key: {key}. Valid keys: {valid_keys}")
+
 def _bedrock_http(path: str, payload: dict, stream: bool = False):
     """
     Call a private Bedrock data‑plane reverse proxy – if one is configured
     (needed in some regulated environments).  Otherwise we rely on boto3.
     """
-    headers = {"Content-Type": "application/json", "authorization-token": ACCESS_TOKEN}
+    # Headers as per Regeneron documentation
+    headers = {
+        "Content-Type": "application/json",
+        "accept": "application/json", 
+        "authorization-token": ACCESS_TOKEN
+    }
     url = CUSTOM_URL.rstrip("/") + path
 
     # Log the request details for debugging
@@ -59,6 +100,14 @@ def _bedrock_http(path: str, payload: dict, stream: bool = False):
         first_msg = payload["messages"][0]
         print(f"First message structure: {json.dumps(first_msg, indent=2)}")
         print(f"First message keys: {list(first_msg.keys())}")
+    
+    # Verify payload structure matches Regeneron expectations
+    try:
+        verify_regeneron_payload_structure(payload)
+        print("✓ Payload structure verified")
+    except ValueError as e:
+        print(f"✗ Payload structure error: {e}")
+        
     print("===========================\n")
 
     resp = requests.post(url, json=payload, headers=headers, stream=stream, timeout=90)
@@ -119,10 +168,18 @@ def build_converse_request(body):
     req = {
         "modelId": body.get("model", DEFAULT_MODEL),
         "messages": anthropic_to_bedrock_messages(body.get("messages", [])),
-        "inferenceConfig": infer or None,
     }
+    
+    # Only add inferenceConfig if there are actual values
+    if infer:
+        req["inferenceConfig"] = infer
+    
+    # Only add system if it's not empty
     if sys := body.get("system"):
-        req["system"] = [{"text": sys}]
+        # Skip empty system prompts
+        if sys.strip():
+            req["system"] = [{"text": sys}]
+    
     return req
 
 
