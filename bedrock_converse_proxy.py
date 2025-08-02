@@ -44,17 +44,19 @@ def _bedrock_http(path: str, payload: dict, stream: bool = False):
     """
     headers = {"Content-Type": "application/json", "authorization-token": ACCESS_TOKEN}
     url = CUSTOM_URL.rstrip("/") + path
-    
+
     # Log the request details for debugging
     print(f"\n=== Bedrock HTTP Request ===")
     print(f"URL: {url}")
+    print(f"Path argument: {path}")
+    print(f"CUSTOM_URL base: {CUSTOM_URL}")
     print(f"Headers: {headers}")
     print(f"Payload: {json.dumps(payload, indent=2)}")
     print(f"Stream: {stream}")
     print("===========================\n")
-    
+
     resp = requests.post(url, json=payload, headers=headers, stream=stream, timeout=90)
-    
+
     # If we get a 400, log the response body
     if resp.status_code == 400:
         print(f"\n=== 400 Bad Request Response ===")
@@ -65,7 +67,7 @@ def _bedrock_http(path: str, payload: dict, stream: bool = False):
         except:
             print("Could not read response body")
         print("================================\n")
-    
+
     resp.raise_for_status()
     return resp
 
@@ -197,20 +199,38 @@ class Handler(BaseHTTPRequestHandler):
         print(f"Streaming: {streaming}")
         print(f"Incoming body: {json.dumps(body, indent=2)}")
         print("===========================\n")
-        
+
         # Always build a Converse request
         payload = build_converse_request({**body, "model": model_id})
-        
+
         if CUSTOM_URL:
-            # Preserve the original request path for custom URL
-            original_path = self.path
-            resp = _bedrock_http(original_path, payload, stream=streaming)
+            # Debug: log the original path
+            print(f"Original self.path: {self.path}")
+            
+            # Parse the path components
+            path_parts = self.path.rsplit('/', 1)
+            print(f"Path parts: {path_parts}")
+            
+            # Determine the correct Bedrock endpoint
+            if streaming:
+                # For streaming, use /converse-stream
+                bedrock_path = path_parts[0] + '/converse-stream'
+                print(f"Transforming streaming invoke to converse-stream")
+            else:
+                # For non-streaming, use /converse
+                bedrock_path = path_parts[0] + '/converse'
+                print(f"Transforming non-streaming invoke to converse")
+            
+            print(f"Bedrock API path: {bedrock_path}")
+            print(f"About to call _bedrock_http with path: {bedrock_path}")
+            
+            resp = _bedrock_http(bedrock_path, payload, stream=streaming)
         else:
             resp = client.converse_stream(**payload) if streaming else client.converse(**payload)
 
         # Check if this was a legacy request (for response formatting)
         is_legacy = "anthropic_version" in body
-        
+
         # -------- stream or eager return ---------------------------------- #
         if streaming:
             self._stream_response(resp, is_legacy)
