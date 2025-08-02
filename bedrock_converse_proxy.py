@@ -53,6 +53,12 @@ def _bedrock_http(path: str, payload: dict, stream: bool = False):
     print(f"Headers: {headers}")
     print(f"Payload: {json.dumps(payload, indent=2)}")
     print(f"Stream: {stream}")
+    
+    # Extra debug - check message structure
+    if "messages" in payload and payload["messages"]:
+        first_msg = payload["messages"][0]
+        print(f"First message structure: {json.dumps(first_msg, indent=2)}")
+        print(f"First message keys: {list(first_msg.keys())}")
     print("===========================\n")
 
     resp = requests.post(url, json=payload, headers=headers, stream=stream, timeout=90)
@@ -186,6 +192,14 @@ class Handler(BaseHTTPRequestHandler):
             model_name = model_name.replace('claude-3-5-sonnet', 'claude-35-sonnet')
             
             bedrock_path = f'/model/{model_name}/converse'
+            
+            print(f"\n=== _handle_messages Debug ===")
+            print(f"Model name: {model_name}")
+            print(f"Bedrock path: {bedrock_path}")
+            print(f"Payload being sent:")
+            print(json.dumps(bed_req, indent=2))
+            print("=============================\n")
+            
             resp = _bedrock_http(bedrock_path, bed_req).json()
         else:
             resp = client.converse(**bed_req)
@@ -219,8 +233,11 @@ class Handler(BaseHTTPRequestHandler):
         # Always build a Converse request
         payload = build_converse_request({**body, "model": model_id})
         
-        print(f"\n=== Debug: Payload Model ID ===")
+        print(f"\n=== Debug: Converse Payload Structure ===")
         print(f"Payload modelId: {payload.get('modelId')}")
+        print(f"Payload keys: {list(payload.keys())}")
+        if 'messages' in payload and payload['messages']:
+            print(f"First message: {json.dumps(payload['messages'][0], indent=2)}")
         print("==============================\n")
 
         if CUSTOM_URL:
@@ -266,6 +283,11 @@ class Handler(BaseHTTPRequestHandler):
             
             print(f"Bedrock API path: {bedrock_path}")
             print(f"About to call _bedrock_http with path: {bedrock_path}")
+            
+            # For debugging: log the exact payload we're about to send
+            print(f"\n=== Payload being sent to Bedrock ===")
+            print(json.dumps(payload, indent=2))
+            print("=====================================\n")
             
             resp = _bedrock_http(bedrock_path, payload, stream=streaming)
         else:
