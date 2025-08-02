@@ -207,18 +207,15 @@ class Handler(BaseHTTPRequestHandler):
             # Debug: log the original path
             print(f"Original self.path: {self.path}")
             
-            # Parse the path components
-            path_parts = self.path.rsplit('/', 1)
-            print(f"Path parts: {path_parts}")
-            
             # Determine the correct Bedrock endpoint
+            # Always use /converse or /converse-stream regardless of the incoming path
             if streaming:
                 # For streaming, use /converse-stream
-                bedrock_path = path_parts[0] + '/converse-stream'
+                bedrock_path = '/converse-stream'
                 print(f"Transforming streaming invoke to converse-stream")
             else:
                 # For non-streaming, use /converse
-                bedrock_path = path_parts[0] + '/converse'
+                bedrock_path = '/converse'
                 print(f"Transforming non-streaming invoke to converse")
             
             print(f"Bedrock API path: {bedrock_path}")
