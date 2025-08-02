@@ -341,12 +341,19 @@ class Handler(BaseHTTPRequestHandler):
             print(f"Bedrock API path: {bedrock_path}")
             print(f"About to call _bedrock_http with path: {bedrock_path}")
             
+            # For Regeneron API, remove modelId from payload as it's in the URL path
+            if "modelId" in payload:
+                payload_for_api = {k: v for k, v in payload.items() if k != "modelId"}
+                print(f"Removed 'modelId' from payload for Regeneron API")
+            else:
+                payload_for_api = payload
+            
             # For debugging: log the exact payload we're about to send
             print(f"\n=== Payload being sent to Bedrock ===")
-            print(json.dumps(payload, indent=2))
+            print(json.dumps(payload_for_api, indent=2))
             print("=====================================\n")
             
-            resp = _bedrock_http(bedrock_path, payload, stream=streaming)
+            resp = _bedrock_http(bedrock_path, payload_for_api, stream=streaming)
         else:
             resp = client.converse_stream(**payload) if streaming else client.converse(**payload)
 
