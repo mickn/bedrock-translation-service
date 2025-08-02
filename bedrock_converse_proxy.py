@@ -477,6 +477,7 @@ class Handler(BaseHTTPRequestHandler):
                                         "type": "message_start",
                                         "role": "assistant"
                                     }
+                                    print(f"Sending event: message_start - {event_data}")
                                     self.wfile.write(f"event: message_start\ndata: {json.dumps(event_data)}\n\n".encode())
                                     
                                     # Also send contentBlockStart
@@ -489,6 +490,7 @@ class Handler(BaseHTTPRequestHandler):
                                         },
                                         "contentBlockIndex": 0
                                     }
+                                    print(f"Sending event: content_block_start - {block_start}")
                                     self.wfile.write(f"event: content_block_start\ndata: {json.dumps(block_start)}\n\n".encode())
                                     
                                 elif "delta" in data and "text" in data["delta"]:
@@ -500,22 +502,25 @@ class Handler(BaseHTTPRequestHandler):
                                         },
                                         "contentBlockIndex": data.get("contentBlockIndex", 0)
                                     }
+                                    print(f"Sending event: content_block_delta - text: '{data['delta']['text']}'")
                                     self.wfile.write(f"event: content_block_delta\ndata: {json.dumps(event_data)}\n\n".encode())
+                                    
+                                elif "contentBlockIndex" in data and not "delta" in data and len(data) <= 2:
+                                    # This appears to be a contentBlockStop event (only has contentBlockIndex and p)
+                                    block_stop = {
+                                        "type": "content_block_stop",
+                                        "contentBlockIndex": data["contentBlockIndex"]
+                                    }
+                                    print(f"Sending event: content_block_stop - {block_stop}")
+                                    self.wfile.write(f"event: content_block_stop\ndata: {json.dumps(block_stop)}\n\n".encode())
                                     
                                 elif "stopReason" in data:
                                     # This is a message stop event
-                                    # First send contentBlockStop
-                                    block_stop = {
-                                        "type": "content_block_stop",
-                                        "contentBlockIndex": 0
-                                    }
-                                    self.wfile.write(f"event: content_block_stop\ndata: {json.dumps(block_stop)}\n\n".encode())
-                                    
-                                    # Then send messageStop with stopReason
                                     stop_event = {
                                         "type": "message_stop",
                                         "stopReason": data["stopReason"]
                                     }
+                                    print(f"Sending event: message_stop - {stop_event}")
                                     self.wfile.write(f"event: message_stop\ndata: {json.dumps(stop_event)}\n\n".encode())
                                     
                                 elif "metrics" in data and "usage" in data:
@@ -528,6 +533,7 @@ class Handler(BaseHTTPRequestHandler):
                                             "totalTokens": data["usage"]["totalTokens"]
                                         }
                                     }
+                                    print(f"Sending event: metadata - {metadata_event}")
                                     self.wfile.write(f"event: metadata\ndata: {json.dumps(metadata_event)}\n\n".encode())
                                 
                                 self.wfile.flush()
