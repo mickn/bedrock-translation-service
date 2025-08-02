@@ -474,52 +474,52 @@ class Handler(BaseHTTPRequestHandler):
                                 if "role" in data and data["role"] == "assistant":
                                     # This is a messageStart event - Bedrock format
                                     event_data = {
-                                        "type": "message_start",
+                                        "type": "messageStart",
                                         "role": "assistant"
                                     }
-                                    print(f"Sending event: message_start - {event_data}")
-                                    self.wfile.write(f"event: message_start\ndata: {json.dumps(event_data)}\n\n".encode())
+                                    print(f"Sending event: messageStart - {event_data}")
+                                    self.wfile.write(f"event: messageStart\ndata: {json.dumps(event_data)}\n\n".encode())
                                     
                                     # Also send contentBlockStart
                                     block_start = {
-                                        "type": "content_block_start",
+                                        "type": "contentBlockStart",
                                         "contentBlockIndex": 0,
                                         "contentBlock": {
                                             "text": ""
                                         }
                                     }
-                                    print(f"Sending event: content_block_start - {block_start}")
-                                    self.wfile.write(f"event: content_block_start\ndata: {json.dumps(block_start)}\n\n".encode())
+                                    print(f"Sending event: contentBlockStart - {block_start}")
+                                    self.wfile.write(f"event: contentBlockStart\ndata: {json.dumps(block_start)}\n\n".encode())
                                     
                                 elif "delta" in data and "text" in data["delta"]:
                                     # This is a content block delta - Bedrock format
                                     event_data = {
-                                        "type": "content_block_delta",
+                                        "type": "contentBlockDelta",
                                         "delta": {
                                             "text": data["delta"]["text"]
                                         },
                                         "contentBlockIndex": data.get("contentBlockIndex", 0)
                                     }
-                                    print(f"Sending event: content_block_delta - text: '{data['delta']['text']}'")
-                                    self.wfile.write(f"event: content_block_delta\ndata: {json.dumps(event_data)}\n\n".encode())
+                                    print(f"Sending event: contentBlockDelta - text: '{data['delta']['text']}'")
+                                    self.wfile.write(f"event: contentBlockDelta\ndata: {json.dumps(event_data)}\n\n".encode())
                                     
                                 elif "contentBlockIndex" in data and not "delta" in data and len(data) <= 2:
                                     # This appears to be a contentBlockStop event (only has contentBlockIndex and p)
                                     block_stop = {
-                                        "type": "content_block_stop",
+                                        "type": "contentBlockStop",
                                         "contentBlockIndex": data["contentBlockIndex"]
                                     }
-                                    print(f"Sending event: content_block_stop - {block_stop}")
-                                    self.wfile.write(f"event: content_block_stop\ndata: {json.dumps(block_stop)}\n\n".encode())
+                                    print(f"Sending event: contentBlockStop - {block_stop}")
+                                    self.wfile.write(f"event: contentBlockStop\ndata: {json.dumps(block_stop)}\n\n".encode())
                                     
                                 elif "stopReason" in data:
                                     # This is a message stop event
                                     stop_event = {
-                                        "type": "message_stop",
+                                        "type": "messageStop",
                                         "stopReason": data["stopReason"]
                                     }
-                                    print(f"Sending event: message_stop - {stop_event}")
-                                    self.wfile.write(f"event: message_stop\ndata: {json.dumps(stop_event)}\n\n".encode())
+                                    print(f"Sending event: messageStop - {stop_event}")
+                                    self.wfile.write(f"event: messageStop\ndata: {json.dumps(stop_event)}\n\n".encode())
                                     
                                 elif "metrics" in data and "usage" in data:
                                     # This is metadata event with usage stats
