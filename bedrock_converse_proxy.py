@@ -158,14 +158,20 @@ def build_converse_request(body):
     Turn an Anthropic‑style body into a Bedrock Converse request.
     Forward ALL recognised inference params.
     """
+    # Limit max_tokens to 8192
+    max_tokens = body.get("max_tokens")
+    if max_tokens is not None and max_tokens > 8192:
+        print(f"Warning: Limiting max_tokens from {max_tokens} to 8192")
+        max_tokens = 8192
+    
     infer_defaults = {
-        "maxTokens": body.get("max_tokens"),
+        "maxTokens": max_tokens,
         "temperature": body.get("temperature"),
         "topP": body.get("top_p"),
         "topK": body.get("top_k"),
         "stopSequences": body.get("stop_sequences"),
     }
-    # prune Nones so we don’t expose nulls
+    # prune Nones so we don't expose nulls
     infer = {k: v for k, v in infer_defaults.items() if v is not None}
 
     req = {
