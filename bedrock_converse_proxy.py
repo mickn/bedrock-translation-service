@@ -206,17 +206,35 @@ class Handler(BaseHTTPRequestHandler):
         if CUSTOM_URL:
             # Debug: log the original path
             print(f"Original self.path: {self.path}")
+            print(f"Model ID from path: {model_id}")
             
-            # Determine the correct Bedrock endpoint
-            # Always use /converse or /converse-stream regardless of the incoming path
+            # Extract just the model name from the full model ID
+            # e.g., "us.anthropic.claude-3-5-sonnet-20241022-v2:0" -> "claude-3-5-sonnet"
+            # or "anthropic.claude-3-5-sonnet-20241022-v2:0" -> "claude-3-5-sonnet"
+            model_name = model_id
+            if '.' in model_name:
+                # Remove region/provider prefix
+                model_name = model_name.split('.', 1)[-1]
+            if ':' in model_name:
+                # Remove version suffix
+                model_name = model_name.split(':', 1)[0]
+            # Remove date suffix if present (e.g., -20241022-v2)
+            model_name = re.sub(r'-\d{8}-v\d+$', '', model_name)
+            
+            # Shorten claude-3-5-sonnet to claude-35-sonnet for the API
+            model_name = model_name.replace('claude-3-5-sonnet', 'claude-35-sonnet')
+            
+            print(f"Extracted model name: {model_name}")
+            
+            # Determine the correct Bedrock endpoint with model in path
             if streaming:
-                # For streaming, use /converse-stream
-                bedrock_path = '/converse-stream'
-                print(f"Transforming streaming invoke to converse-stream")
+                # For streaming, use /model/{model}/converse-stream
+                bedrock_path = f'/model/{model_name}/converse-stream'
+                print(f"Transforming streaming invoke to model-specific converse-stream")
             else:
-                # For non-streaming, use /converse
-                bedrock_path = '/converse'
-                print(f"Transforming non-streaming invoke to converse")
+                # For non-streaming, use /model/{model}/converse
+                bedrock_path = f'/model/{model_name}/converse'
+                print(f"Transforming non-streaming invoke to model-specific converse")
             
             print(f"Bedrock API path: {bedrock_path}")
             print(f"About to call _bedrock_http with path: {bedrock_path}")
