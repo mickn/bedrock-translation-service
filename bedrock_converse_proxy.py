@@ -415,38 +415,104 @@ class Handler(BaseHTTPRequestHandler):
         
         # Handle streaming differently for CUSTOM_URL vs boto3
         if CUSTOM_URL:
-            # For CUSTOM_URL, resp is a requests.Response object with SSE stream
+            # For CUSTOM_URL, Regeneron uses a binary protocol, not standard SSE
             print(f"\n=== Streaming Response Debug ===")
-            print(f"Starting to read SSE stream...")
-            line_count = 0
-            for line in resp.iter_lines():
-                line_count += 1
-                if line:
-                    print(f"Line {line_count}: {line[:100]}...")  # Print first 100 chars
-                    try:
-                        line_str = line.decode('utf-8')
-                    except UnicodeDecodeError:
-                        # Try with different encoding or skip malformed lines
-                        try:
-                            line_str = line.decode('latin-1')
-                        except:
-                            print(f"Could not decode line {line_count}")
-                            continue
+            print(f"Starting to read binary stream...")
+            
+            # Read the raw binary stream
+            buffer = b""
+            for chunk in resp.iter_content(chunk_size=1024):
+                if chunk:
+                    buffer += chunk
                     
-                    print(f"Decoded line: {line_str[:200]}...")  # Print first 200 chars
-                    
-                    if line_str.startswith('data: '):
-                        try:
-                            data = json.loads(line_str[6:])  # Skip "data: " prefix
-                            # The data should already be in the correct format from Regeneron
-                            # Just forward it as-is
-                            self.wfile.write(f"event: {data.get('type', 'message')}\ndata: {json.dumps(data)}\n\n".encode())
-                            self.wfile.flush()
-                        except json.JSONDecodeError as e:
-                            # Skip non-JSON lines
-                            print(f"Failed to parse JSON: {e}")
-                            pass
-            print(f"Finished processing {line_count} lines from SSE stream")
+                    # Look for JSON messages in the buffer
+                    # The format appears to be: :message-type\x07\x00\x05event{JSON}
+                    while b':message-type\x07\x00\x05event{' in buffer:
+                        # Find the start of JSON
+                        start_idx = buffer.find(b':message-type\x07\x00\x05event{') + len(b':message-type\x07\x00\x05event')
+                        
+                        # Find the end of JSON by looking for the closing brace
+                        # This is a simple approach - may need refinement
+                        brace_count = 0
+                        end_idx = start_idx
+                        in_string = False
+                        escape_next = False
+                        
+                        for i in range(start_idx, len(buffer)):
+                            char = buffer[i:i+1]
+                            
+                            if escape_next:
+                                escape_next = False
+                                continue
+                                
+                            if char == b'\\':
+                                escape_next = True
+                                continue
+                                
+                            if char == b'"' and not escape_next:
+                                in_string = not in_string
+                                continue
+                                
+                            if not in_string:
+                                if char == b'{':
+                                    brace_count += 1
+                                elif char == b'}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        end_idx = i + 1
+                                        break
+                        
+                        if end_idx > start_idx:
+                            # Extract and parse the JSON
+                            json_bytes = buffer[start_idx:end_idx]
+                            try:
+                                json_str = json_bytes.decode('utf-8')
+                                data = json.loads(json_str)
+                                print(f"Parsed event: {data}")
+                                
+                                # Convert to Anthropic's SSE format
+                                if "role" in data and data["role"] == "assistant":
+                                    # This is a messageStart event
+                                    event_data = {
+                                        "type": "message_start",
+                                        "message": {
+                                            "id": data.get("p", "msg_unknown"),
+                                            "type": "message",
+                                            "role": "assistant",
+                                            "content": [],
+                                            "model": "claude-3-5-sonnet",
+                                            "usage": {"input_tokens": 0, "output_tokens": 0}
+                                        }
+                                    }
+                                    self.wfile.write(f"event: message_start\ndata: {json.dumps(event_data)}\n\n".encode())
+                                elif "delta" in data and "text" in data["delta"]:
+                                    # This is a content block delta
+                                    event_data = {
+                                        "type": "content_block_delta",
+                                        "index": data.get("contentBlockIndex", 0),
+                                        "delta": {"type": "text_delta", "text": data["delta"]["text"]}
+                                    }
+                                    self.wfile.write(f"event: content_block_delta\ndata: {json.dumps(event_data)}\n\n".encode())
+                                
+                                self.wfile.flush()
+                                
+                            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                                print(f"Failed to parse JSON: {e}")
+                                print(f"JSON bytes: {json_bytes[:100]}...")
+                            
+                            # Remove processed data from buffer
+                            buffer = buffer[end_idx:]
+                        else:
+                            # No complete JSON found yet, wait for more data
+                            break
+            
+            # Send final events
+            self.wfile.write(b"event: content_block_stop\ndata: {\"type\": \"content_block_stop\", \"index\": 0}\n\n")
+            self.wfile.write(b"event: message_delta\ndata: {\"type\": \"message_delta\", \"delta\": {\"stop_reason\": \"end_turn\", \"stop_sequence\": null}, \"usage\": {\"output_tokens\": 0}}\n\n")
+            self.wfile.write(b"event: message_stop\ndata: {\"type\": \"message_stop\"}\n\n")
+            self.wfile.flush()
+            
+            print(f"Finished processing binary stream")
         else:
             # For boto3, resp is already parsed
             for evt in resp:
