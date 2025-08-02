@@ -483,12 +483,10 @@ class Handler(BaseHTTPRequestHandler):
                                     # Also send contentBlockStart
                                     block_start = {
                                         "type": "content_block_start",
-                                        "start": {
-                                            "contentBlock": {
-                                                "text": ""
-                                            }
-                                        },
-                                        "contentBlockIndex": 0
+                                        "contentBlockIndex": 0,
+                                        "contentBlock": {
+                                            "text": ""
+                                        }
                                     }
                                     print(f"Sending event: content_block_start - {block_start}")
                                     self.wfile.write(f"event: content_block_start\ndata: {json.dumps(block_start)}\n\n".encode())
